@@ -1,5 +1,6 @@
 import logging
 import csv
+import time
 
 from pathlib import Path
 from shutil import copy2
@@ -68,8 +69,16 @@ def csv_operation(
     csv_key_idx_src: int = 0,
     csv_key_idx_dst: int = 1,
 ):
-    input_files: dict[str, Path] = get_folder_data(input_path)
-    input_header, input_data = get_csv_data(input_csv_path, key_index=csv_key_idx_src)
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        future_get_folder_data = executor.submit(get_folder_data, input_path)
+        future_get_csv_data = executor.submit(
+            get_csv_data, input_csv_path, csv_key_idx_src
+        )
+        _ = [f.done() for f in [future_get_folder_data, future_get_csv_data]]
+        input_files = future_get_folder_data.result()
+        input_header, input_data = future_get_csv_data.result()
+    # input_files: dict[str, Path] = get_folder_data(input_path)
+    # input_header, input_data = get_csv_data(input_csv_path, key_index=csv_key_idx_src)
     # prepare report statistic data
     input_files_len = len(input_files)
     input_records = len(input_data)
@@ -139,6 +148,7 @@ def main():
     input_path = check_absolute_path(args.get("input"), work_path)
     input_csv_path = check_absolute_path(args.get("input_csv"), work_path)
     output_path = check_absolute_path(args.get("output"), work_path)
+    logger.info("BEGIN")
     csv_operation(
         input_path, input_csv_path, output_path, csv_key_idx_src, csv_key_idx_dst
     )
