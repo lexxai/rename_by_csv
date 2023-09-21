@@ -1,16 +1,19 @@
 import asyncio
 import logging
+import platform
 
 # import csv
 
 # from pathlib import Path
 # from shutil import copy2
 
-from asyncio import run
+import asyncio
 from aiopath import AsyncPath
 from aioshutil import copy2
 import aiocsv as csv
 
+from tqdm import tqdm
+from tqdm.contrib.logging import logging_redirect_tqdm
 
 try:
     from txt2csv.parse_args import app_arg
@@ -71,16 +74,17 @@ async def csv_operation(
     if input_data:
         await output.mkdir(exist_ok=True, parents=True)
         try:
-            for key, row in input_data.items():
-                filename_src = key
-                filename_dst = row[1]
-                src_path = input_files.get(filename_src)
-                if src_path:
-                    if await src_path.is_file():
-                        new_path = src_path.with_stem(filename_dst)
-                        output_path = output.joinpath(new_path.name)
-                        logger.debug(f"copy2({src_path}, {output_path})")
-                        await copy2(src_path, output_path)
+            with logging_redirect_tqdm():
+                for key, row in tqdm(input_data.items()):
+                    filename_src = key
+                    filename_dst = row[1]
+                    src_path = input_files.get(filename_src)
+                    if src_path:
+                        if await src_path.is_file():
+                            new_path = src_path.with_stem(filename_dst)
+                            output_path = output.joinpath(new_path.name)
+                            logger.debug(f"copy2({src_path}, {output_path})")
+                            await copy2(src_path, output_path)
         except OSError as err:
             logger.error(f"ERROR {err}")
 
@@ -109,8 +113,9 @@ async def main_async():
 
 
 if __name__ == "__main__":
-    # try:
-    run(main_async())
-
-# except Exception as err:
-#     print(err)
+    if platform.system() == "Windows":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    try:
+        asyncio.run(main_async())
+    except Exception as err:
+        print(err)
