@@ -38,7 +38,7 @@ def get_csv_data(
             reader = csv.reader(csvfile, delimiter=delimiter)
             try:
                 while not (input_header := next(reader)):
-                    logger.info(f"reread csv header: {input_header}")
+                    logger.debug(f"reread csv header: {input_header}")
                 key: str = ""
                 try:
                     for row in reader:
