@@ -16,7 +16,7 @@ from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 try:
-    from txt2csv.parse_args import app_arg
+    from rename_by_csv.parse_args import app_arg
 except ImportError:
     from parse_args import app_arg
 
