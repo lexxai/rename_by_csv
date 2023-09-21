@@ -1,7 +1,15 @@
+import asyncio
 import logging
-import csv
-from pathlib import Path
-from shutil import copy2
+
+# import csv
+
+# from pathlib import Path
+# from shutil import copy2
+
+from asyncio import run
+from aiopath import AsyncPath
+from aioshutil import copy2
+import aiocsv as csv
 
 
 try:
@@ -12,33 +20,33 @@ except ImportError:
 logger: logging
 
 
-def get_folder_data(input_folder: Path) -> dict[str, Path]:
+async def get_folder_data(input_folder: AsyncPath) -> dict[str, AsyncPath]:
     result = {}
-    if input_folder.is_dir():
+    if await input_folder.is_dir():
         # result = [item.stem for item in input_folder.glob("*.*")]
-        for input_file in input_folder.glob("*.*"):
-            if input_file.is_file():
+        async for input_file in input_folder.glob("*.*"):
+            if await input_file.is_file():
                 input_file_stem = input_file.stem
                 result[input_file_stem] = input_file
     return result
 
 
-def get_csv_data(
-    input_file: Path, key_index: int = 0, delimiter=",", encoding="utf-8-sig"
+async def get_csv_data(
+    input_file: AsyncPath, key_index: int = 0, delimiter=",", encoding="utf-8-sig"
 ) -> tuple[list[str], dict[str, list[str]]]:
     input_data: dict[str, list[str]] = {}
     input_header: list[str] = []
-    if input_file.is_file():
-        with input_file.open(newline="", encoding=encoding) as csvfile:
-            reader = csv.reader(csvfile, delimiter=delimiter)
+    if await input_file.is_file():
+        async with input_file.open(newline="", encoding=encoding) as csvfile:
+            reader = csv.AsyncReader(csvfile, delimiter=delimiter)
             try:
-                while not (input_header := next(reader)):
+                while not (input_header := await anext(reader)):
                     logger.info(f"reread csv header: {input_header}")
                 key: str = ""
                 try:
-                    for row in reader:
+                    async for row in reader:
                         if row:
-                            key = Path(row[key_index]).stem
+                            key = AsyncPath(row[key_index]).stem
                             input_data[key] = row
                 except IndexError:
                     logger.error(f"{input_file} key index error: {key_index}")
@@ -49,9 +57,11 @@ def get_csv_data(
     return input_header, input_data
 
 
-def csv_operation(input_path: Path, input_csv_path: Path, output: Path):
-    input_files: dict[str, Path] = get_folder_data(input_path)
-    input_header, input_data = get_csv_data(input_csv_path)
+async def csv_operation(
+    input_path: AsyncPath, input_csv_path: AsyncPath, output: AsyncPath
+):
+    input_files: dict[str, AsyncPath] = await get_folder_data(input_path)
+    input_header, input_data = await get_csv_data(input_csv_path)
     # prepare report statistic data
     input_files_len = len(input_files)
     input_records = len(input_data)
@@ -59,18 +69,18 @@ def csv_operation(input_path: Path, input_csv_path: Path, output: Path):
     logger.info(report_txt)
     # save result to csv file
     if input_data:
-        output.mkdir(exist_ok=True, parents=True)
+        await output.mkdir(exist_ok=True, parents=True)
         try:
             for key, row in input_data.items():
                 filename_src = key
                 filename_dst = row[1]
                 src_path = input_files.get(filename_src)
                 if src_path:
-                    if src_path.is_file():
+                    if await src_path.is_file():
                         new_path = src_path.with_stem(filename_dst)
                         output_path = output.joinpath(new_path.name)
                         logger.debug(f"copy2({src_path}, {output_path})")
-                        copy2(src_path, output_path)
+                        await copy2(src_path, output_path)
         except OSError as err:
             logger.error(f"ERROR {err}")
 
@@ -78,11 +88,11 @@ def csv_operation(input_path: Path, input_csv_path: Path, output: Path):
         logger.error("No output data. Nothing to save.")
 
 
-def check_absolute_path(p: Path, work: Path) -> Path:
+def check_absolute_path(p: AsyncPath, work: AsyncPath) -> AsyncPath:
     return p if p.is_absolute() else work.joinpath(p)
 
 
-def main():
+async def main_async():
     global logger
     args = app_arg()
     logging.basicConfig(
@@ -94,12 +104,13 @@ def main():
     input_path = check_absolute_path(args.get("input"), work_path)
     input_csv_path = check_absolute_path(args.get("input_csv"), work_path)
     output_path = check_absolute_path(args.get("output"), work_path)
-    csv_operation(input_path, input_csv_path, output_path)
+    await csv_operation(input_path, input_csv_path, output_path)
     logger.info("DONE")
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception as err:
-        print(err)
+    # try:
+    run(main_async())
+
+# except Exception as err:
+#     print(err)

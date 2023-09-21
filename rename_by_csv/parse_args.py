@@ -2,7 +2,9 @@ import argparse
 import os
 import sys
 from pefile import PE
-from pathlib import Path
+
+# from pathlib import Path
+from aiopath import AsyncPath as Path
 
 if sys.version_info >= (3, 8):
     from importlib.metadata import version
@@ -60,7 +62,9 @@ def app_arg():
         type=Path,
     )
     ap.add_argument("--input", help="Path to input folder", required=True, type=Path)
-    ap.add_argument("--input_csv", help="Path to input_csv file", required=True, type=Path)
+    ap.add_argument(
+        "--input_csv", help="Path to input_csv file", required=True, type=Path
+    )
     ap.add_argument(
         "--output",
         help="Path for output folder, default 'output'",
