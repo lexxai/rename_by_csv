@@ -60,12 +60,26 @@ def app_arg():
         type=Path,
     )
     ap.add_argument("--input", help="Path to input folder", required=True, type=Path)
-    ap.add_argument("--input_csv", help="Path to input_csv file", required=True, type=Path)
+    ap.add_argument(
+        "--input_csv", help="Path to input_csv file", required=True, type=Path
+    )
     ap.add_argument(
         "--output",
         help="Path for output folder, default 'output'",
         default="output",
         type=Path,
+    )
+    ap.add_argument(
+        "--csv_key_idx_src",
+        help="Key index in csv file for search source file , default 0",
+        default=0,
+        type=int,
+    )
+    ap.add_argument(
+        "--csv_key_idx_dst",
+        help="Key index in csv file for save new filename , default 1",
+        default=1,
+        type=int,
     )
     ap.add_argument(
         "--verbose",

@@ -1,9 +1,6 @@
 import logging
 import csv
-import random
-import time
 
-# import multiprocessing
 from pathlib import Path
 from shutil import copy2
 from tqdm import tqdm
@@ -56,20 +53,23 @@ def get_csv_data(
     return input_header, input_data
 
 
-def do_copy(src_path: Path, output_path: Path, timer=None):
+def do_copy(src_path: Path, output_path: Path):
     try:
         copy2(src_path, output_path)
-        # time.sleep(random.randrange(2, 6))
-        # logger.debug(f"copy2 done({src_path}, {output_path})")
-        if src_path.stem != "230423032":
-            return src_path.stem
+        return src_path.stem
     except OSError as os_error:
         logger.error(f"ERROR: {os_error}")
 
 
-def csv_operation(input_path: Path, input_csv_path: Path, output: Path):
+def csv_operation(
+    input_path: Path,
+    input_csv_path: Path,
+    output: Path,
+    csv_key_idx_src: int = 0,
+    csv_key_idx_dst: int = 1,
+):
     input_files: dict[str, Path] = get_folder_data(input_path)
-    input_header, input_data = get_csv_data(input_csv_path)
+    input_header, input_data = get_csv_data(input_csv_path, key_index=csv_key_idx_src)
     # prepare report statistic data
     input_files_len = len(input_files)
     input_records = len(input_data)
@@ -83,8 +83,9 @@ def csv_operation(input_path: Path, input_csv_path: Path, output: Path):
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as pool:
             for key, row in input_data.items():
                 filename_src = key
-                filename_dst = row[1]
+                filename_dst = Path(row[csv_key_idx_dst]).stem
                 src_path = input_files.get(filename_src)
+                logger.debug(f"{src_path=},{filename_src=}, {filename_dst=}")
                 if src_path:
                     if src_path.is_file():
                         new_path = src_path.with_stem(filename_dst)
@@ -94,26 +95,30 @@ def csv_operation(input_path: Path, input_csv_path: Path, output: Path):
                         # do_copy(src_path, output_path)
                         future = pool.submit(do_copy, src_path, output_path)
                         futures.append(future)
-            with logging_redirect_tqdm():
-                # Wait result
-                logger.info(f"Wait all copy instances result , total:  {len(futures)}")
-                result = [
-                    future.result()
-                    for future in tqdm(
-                        concurrent.futures.as_completed(futures), total=len(futures)
+            if futures:
+                with logging_redirect_tqdm():
+                    # Wait result
+                    logger.info(
+                        f"Wait all copy instances result , total:  {len(futures)}"
                     )
-                ]
-                result = list(filter(lambda x: x is not None, result))
-                result_len = len(result)
-                if result_len != len(futures):
-                    r_set = set(result)
-                    i_set = set(input_data.keys())
-                    diff_set = i_set.difference(r_set)
-                    logger.error(f"ERROR. Some files was not copied: {diff_set}")
-                # logger.debug(result)
-
+                    result = [
+                        future.result()
+                        for future in tqdm(
+                            concurrent.futures.as_completed(futures), total=len(futures)
+                        )
+                    ]
+                    result = list(filter(lambda x: x is not None, result))
+                    result_len = len(result)
+                    if result_len != len(futures):
+                        r_set = set(result)
+                        i_set = set(input_data.keys())
+                        diff_set = i_set.difference(r_set)
+                        logger.error(f"ERROR. Some files was not copied: {diff_set}")
+                    # logger.debug(result)
+            else:
+                logger.error("ERROR: No data for copy. Nothing to do.")
     else:
-        logger.error("No output data. Nothing to save.")
+        logger.error("ERROR: No output data. Nothing to save.")
 
 
 def check_absolute_path(p: Path, work: Path) -> Path:
@@ -129,11 +134,15 @@ def main():
     )
     logger = logging.getLogger(__name__)
     work_path = args.get("work")
+    csv_key_idx_src = args.get("csv_key_idx_src", 0)
+    csv_key_idx_dst = args.get("csv_key_idx_dst", 1)
     input_path = check_absolute_path(args.get("input"), work_path)
     input_csv_path = check_absolute_path(args.get("input_csv"), work_path)
     output_path = check_absolute_path(args.get("output"), work_path)
-    csv_operation(input_path, input_csv_path, output_path)
-    logger.info("DONE")
+    csv_operation(
+        input_path, input_csv_path, output_path, csv_key_idx_src, csv_key_idx_dst
+    )
+    logger.info("FINISHED")
 
 
 if __name__ == "__main__":
