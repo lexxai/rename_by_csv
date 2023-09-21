@@ -51,23 +51,28 @@ def get_csv_data(
 
 def csv_operation(input_path: Path, input_csv_path: Path, output: Path):
     input_files: dict[str, Path] = get_folder_data(input_path)
-    input_data: tuple[list[str], dict[str, list[str]]] = get_csv_data(input_csv_path)
+    input_header, input_data = get_csv_data(input_csv_path)
     # prepare report statistic data
+    input_files_len = len(input_files)
     input_records = len(input_data)
-    report_txt = f"{input_records=}"
+    report_txt = f"Files on input folder: {input_files_len}. Records on csv file: {input_records}"
     logger.info(report_txt)
     # save result to csv file
     if input_data:
-        for row in input_data:
-            filename_src = row[0]
-            filename_dst = row[1]
-            src_path = input_files.get(filename_src)
-            if src_path:
-                src_path = input_path.joinpath(filename_dst).with_stem(filename_dst)
-                if src_path.is_file():
-                    output_path = output.joinpath(src_path.name)
-                    logger.info(f"copy2({src_path}, {output_path})")
-                    # copy2(src_path, output_path)
+        output.mkdir(exist_ok=True, parents=True)
+        try:
+            for key, row in input_data.items():
+                filename_src = key
+                filename_dst = row[1]
+                src_path = input_files.get(filename_src)
+                if src_path:
+                    if src_path.is_file():
+                        new_path = src_path.with_stem(filename_dst)
+                        output_path = output.joinpath(new_path.name)
+                        logger.debug(f"copy2({src_path}, {output_path})")
+                        copy2(src_path, output_path)
+        except OSError as err:
+            logger.error(f"ERROR {err}")
 
     else:
         logger.error("No output data. Nothing to save.")
@@ -90,6 +95,7 @@ def main():
     input_csv_path = check_absolute_path(args.get("input_csv"), work_path)
     output_path = check_absolute_path(args.get("output"), work_path)
     csv_operation(input_path, input_csv_path, output_path)
+    logger.info("DONE")
 
 
 if __name__ == "__main__":
