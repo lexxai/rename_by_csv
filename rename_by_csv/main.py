@@ -8,6 +8,8 @@ import platform
 # from shutil import copy2
 
 import asyncio
+import time
+
 from aiopath import AsyncPath
 from aioshutil import copy2
 import aiocsv as csv
@@ -45,7 +47,7 @@ async def get_csv_data(
             reader = csv.AsyncReader(csvfile, delimiter=delimiter)
             try:
                 while not (input_header := await anext(reader)):
-                    logger.info(f"reread csv header: {input_header}")
+                    logger.debug(f"reread csv header: {input_header}")
                 key: str = ""
                 try:
                     async for row in reader:
@@ -76,10 +78,18 @@ async def csv_operation(
     csv_key_idx_src: int = 0,
     csv_key_idx_dst: int = 1,
 ):
-    input_files: dict[str, AsyncPath] = await get_folder_data(input_path)
-    input_header, input_data = await get_csv_data(
-        input_csv_path, key_index=csv_key_idx_src
-    )
+    async with asyncio.TaskGroup() as tg:
+        task_folder_data = tg.create_task(get_folder_data(input_path))
+        task_csv_data = tg.create_task(
+            get_csv_data(input_csv_path, key_index=csv_key_idx_src)
+        )
+    # run both and wait result if without TaskGroup
+    # [t.done() for t in [task_folder_data, task_csv_data]]
+
+    # All ready to get result
+    input_files: dict[str, AsyncPath] = task_folder_data.result()
+    input_header, input_data = task_csv_data.result()
+
     # prepare report statistic data
     input_files_len = len(input_files)
     input_records = len(input_data)
@@ -93,11 +103,12 @@ async def csv_operation(
             filename_src = key
             filename_dst = AsyncPath(row[csv_key_idx_dst]).stem
             src_path = input_files.get(filename_src)
+            logger.debug(f"{src_path=},{filename_src=}, {filename_dst=}")
             if src_path:
                 if await src_path.is_file():
                     new_path = src_path.with_stem(filename_dst)
                     output_path = output.joinpath(new_path.name)
-                    logger.debug(f"copy2({src_path}, {output_path})")
+                    # logger.debug(f"copy2({src_path}, {output_path})")
                     future = do_copy(src_path, output_path)
                     futures.append(future)
         if futures:
@@ -113,7 +124,7 @@ async def csv_operation(
                     diff_set = i_set.difference(r_set)
                     logger.error(f"ERROR. Some files was not copied: {diff_set}")
                 # logger.debug(result)
-                logger.info(f"{result=}")
+                # logger.info(f"{result=}")
         else:
             logger.error("ERROR: No data for copy. Nothing to do.")
 
