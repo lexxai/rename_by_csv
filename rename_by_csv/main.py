@@ -70,10 +70,16 @@ async def do_copy(src_path: AsyncPath, output_path: AsyncPath):
 
 
 async def csv_operation(
-    input_path: AsyncPath, input_csv_path: AsyncPath, output: AsyncPath
+    input_path: AsyncPath,
+    input_csv_path: AsyncPath,
+    output: AsyncPath,
+    csv_key_idx_src: int = 0,
+    csv_key_idx_dst: int = 1,
 ):
     input_files: dict[str, AsyncPath] = await get_folder_data(input_path)
-    input_header, input_data = await get_csv_data(input_csv_path)
+    input_header, input_data = await get_csv_data(
+        input_csv_path, key_index=csv_key_idx_src
+    )
     # prepare report statistic data
     input_files_len = len(input_files)
     input_records = len(input_data)
@@ -85,7 +91,7 @@ async def csv_operation(
         futures = []
         for key, row in input_data.items():
             filename_src = key
-            filename_dst = row[1]
+            filename_dst = AsyncPath(row[csv_key_idx_dst]).stem
             src_path = input_files.get(filename_src)
             if src_path:
                 if await src_path.is_file():
@@ -94,11 +100,22 @@ async def csv_operation(
                     logger.debug(f"copy2({src_path}, {output_path})")
                     future = do_copy(src_path, output_path)
                     futures.append(future)
-        with logging_redirect_tqdm():
-            result = [
-                await future for future in tqdm.asyncio.tqdm.as_completed(futures)
-            ]
-            logger.info(f"{result=}")
+        if futures:
+            with logging_redirect_tqdm():
+                result = [
+                    await future for future in tqdm.asyncio.tqdm.as_completed(futures)
+                ]
+                result = list(filter(lambda x: x is not None, result))
+                result_len = len(result)
+                if result_len != len(futures):
+                    r_set = set(result)
+                    i_set = set(input_data.keys())
+                    diff_set = i_set.difference(r_set)
+                    logger.error(f"ERROR. Some files was not copied: {diff_set}")
+                # logger.debug(result)
+                logger.info(f"{result=}")
+        else:
+            logger.error("ERROR: No data for copy. Nothing to do.")
 
     else:
         logger.error("No output data. Nothing to save.")
@@ -117,11 +134,15 @@ async def main_async():
     )
     logger = logging.getLogger(__name__)
     work_path = args.get("work")
+    csv_key_idx_src = args.get("csv_key_idx_src", 0)
+    csv_key_idx_dst = args.get("csv_key_idx_dst", 1)
     input_path = check_absolute_path(args.get("input"), work_path)
     input_csv_path = check_absolute_path(args.get("input_csv"), work_path)
     output_path = check_absolute_path(args.get("output"), work_path)
-    await csv_operation(input_path, input_csv_path, output_path)
-    logger.info("DONE")
+    await csv_operation(
+        input_path, input_csv_path, output_path, csv_key_idx_src, csv_key_idx_dst
+    )
+    logger.info("FINISHED")
 
 
 if __name__ == "__main__":
