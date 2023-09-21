@@ -1,9 +1,14 @@
 import logging
 import csv
+import random
+import time
+
+# import multiprocessing
 from pathlib import Path
 from shutil import copy2
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
+import concurrent.futures
 
 
 try:
@@ -51,6 +56,16 @@ def get_csv_data(
     return input_header, input_data
 
 
+def do_copy(src_path: Path, output_path: Path, timer=None):
+    try:
+        copy2(src_path, output_path)
+        # time.sleep(random.randrange(2, 6))
+        # logger.debug(f"copy2 done({src_path}, {output_path})")
+        return output_path.stem
+    except OSError as os_error:
+        logger.error(f"ERROR: {os_error}")
+
+
 def csv_operation(input_path: Path, input_csv_path: Path, output: Path):
     input_files: dict[str, Path] = get_folder_data(input_path)
     input_header, input_data = get_csv_data(input_csv_path)
@@ -59,24 +74,35 @@ def csv_operation(input_path: Path, input_csv_path: Path, output: Path):
     input_records = len(input_data)
     report_txt = f"Files on input folder: {input_files_len}. Records on csv file: {input_records}"
     logger.info(report_txt)
-    # save result to csv file
+    # copy files to destination with new name
     if input_data:
         output.mkdir(exist_ok=True, parents=True)
-
-        try:
+        futures = []
+        max_workers = None  # automatically  min(32, os.cpu_count() + 4).
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as pool:
+            for key, row in input_data.items():
+                filename_src = key
+                filename_dst = row[1]
+                src_path = input_files.get(filename_src)
+                if src_path:
+                    if src_path.is_file():
+                        new_path = src_path.with_stem(filename_dst)
+                        output_path = output.joinpath(new_path.name)
+                        # logger.debug(f"create task copy2({src_path}, {output_path})")
+                        # create task
+                        # do_copy(src_path, output_path)
+                        future = pool.submit(do_copy, src_path, output_path)
+                        futures.append(future)
             with logging_redirect_tqdm():
-                for key, row in tqdm(input_data.items()):
-                    filename_src = key
-                    filename_dst = row[1]
-                    src_path = input_files.get(filename_src)
-                    if src_path:
-                        if src_path.is_file():
-                            new_path = src_path.with_stem(filename_dst)
-                            output_path = output.joinpath(new_path.name)
-                            logger.debug(f"copy2({src_path}, {output_path})")
-                            copy2(src_path, output_path)
-        except OSError as err:
-            logger.error(f"ERROR {err}")
+                # Wait result
+                logger.info(f"Wait all copy instances result , total:  {len(futures)}")
+                result = [
+                    future.result()
+                    for future in tqdm(
+                        concurrent.futures.as_completed(futures), total=len(futures)
+                    )
+                ]
+                logger.debug(result)
 
     else:
         logger.error("No output data. Nothing to save.")
@@ -91,7 +117,7 @@ def main():
     args = app_arg()
     logging.basicConfig(
         level=logging.DEBUG if args.get("verbose") else logging.INFO,
-        format="%(asctime)s  %(message)s",
+        format="%(asctime)s %(threadName)s  %(message)s",
     )
     logger = logging.getLogger(__name__)
     work_path = args.get("work")
