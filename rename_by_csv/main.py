@@ -61,7 +61,8 @@ def do_copy(src_path: Path, output_path: Path, timer=None):
         copy2(src_path, output_path)
         # time.sleep(random.randrange(2, 6))
         # logger.debug(f"copy2 done({src_path}, {output_path})")
-        return output_path.stem
+        if src_path.stem != "230423032":
+            return src_path.stem
     except OSError as os_error:
         logger.error(f"ERROR: {os_error}")
 
@@ -102,7 +103,14 @@ def csv_operation(input_path: Path, input_csv_path: Path, output: Path):
                         concurrent.futures.as_completed(futures), total=len(futures)
                     )
                 ]
-                logger.debug(result)
+                result = list(filter(lambda x: x is not None, result))
+                result_len = len(result)
+                if result_len != len(futures):
+                    r_set = set(result)
+                    i_set = set(input_data.keys())
+                    diff_set = i_set.difference(r_set)
+                    logger.error(f"ERROR. Some files was not copied: {diff_set}")
+                # logger.debug(result)
 
     else:
         logger.error("No output data. Nothing to save.")
