@@ -14,6 +14,7 @@ import aiocsv as csv
 
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
+import tqdm.asyncio
 
 try:
     from rename_by_csv.parse_args import app_arg
@@ -60,6 +61,14 @@ async def get_csv_data(
     return input_header, input_data
 
 
+async def do_copy(src_path: AsyncPath, output_path: AsyncPath):
+    try:
+        await copy2(src_path, output_path)
+        return src_path.stem
+    except OSError as os_error:
+        logger.error(f"ERROR: {os_error}")
+
+
 async def csv_operation(
     input_path: AsyncPath, input_csv_path: AsyncPath, output: AsyncPath
 ):
@@ -73,20 +82,23 @@ async def csv_operation(
     # save result to csv file
     if input_data:
         await output.mkdir(exist_ok=True, parents=True)
-        try:
-            with logging_redirect_tqdm():
-                for key, row in tqdm(input_data.items()):
-                    filename_src = key
-                    filename_dst = row[1]
-                    src_path = input_files.get(filename_src)
-                    if src_path:
-                        if await src_path.is_file():
-                            new_path = src_path.with_stem(filename_dst)
-                            output_path = output.joinpath(new_path.name)
-                            logger.debug(f"copy2({src_path}, {output_path})")
-                            await copy2(src_path, output_path)
-        except OSError as err:
-            logger.error(f"ERROR {err}")
+        futures = []
+        for key, row in input_data.items():
+            filename_src = key
+            filename_dst = row[1]
+            src_path = input_files.get(filename_src)
+            if src_path:
+                if await src_path.is_file():
+                    new_path = src_path.with_stem(filename_dst)
+                    output_path = output.joinpath(new_path.name)
+                    logger.debug(f"copy2({src_path}, {output_path})")
+                    future = do_copy(src_path, output_path)
+                    futures.append(future)
+        with logging_redirect_tqdm():
+            result = [
+                await future for future in tqdm.asyncio.tqdm.as_completed(futures)
+            ]
+            logger.info(f"{result=}")
 
     else:
         logger.error("No output data. Nothing to save.")
