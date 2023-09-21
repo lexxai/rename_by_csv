@@ -8,14 +8,14 @@ parser = ConfigParser()
 # read config file
 description = ""
 ver = "0.0.1"
-config_setup = Path("..\setup.cfg")
+config_setup = Path("../setup.cfg")
 if config_setup.is_file():
     parser.read(config_setup)
     ver = parser["metadata"].get("version", "0.0.1")
     description = parser["metadata"].get("description", "").strip('"')
     name = parser["metadata"].get("name", "").strip('"')
 else:
-    config_setup = Path("../rename_by_csv/pyproject.toml")
+    config_setup = Path("../pyproject.toml")
     if config_setup.is_file():
         parser.read(config_setup)
         ver = parser["tool.poetry"].get("version", "0.0.1").strip('"')
@@ -29,7 +29,7 @@ if len(sys.argv) > 1:
         filename.rename(new_fn)
 else:
     pyinstaller_versionfile.create_versionfile(
-        output_file="../rename_by_csv/versionfile.txt",
+        output_file="../versionfile.txt",
         version=f"{ver}.0",
         company_name="lexxai",
         file_description=description,
